@@ -1,0 +1,132 @@
+let selectedFile = null;
+
+// Handle file selection
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  selectedFile = e.target.files[0];
+  updateFileInfo();
+});
+
+// Drag & drop support
+const dropArea = document.getElementById('drop-area');
+dropArea.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropArea.style.background = '#f8f9fa';
+});
+dropArea.addEventListener('dragleave', () => {
+  dropArea.style.background = '';
+});
+dropArea.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropArea.style.background = '';
+  selectedFile = e.dataTransfer.files[0];
+  updateFileInfo();
+});
+
+// Update UI when file is selected
+function updateFileInfo() {
+  if (!selectedFile) return;
+  
+  const fileInfo = document.getElementById('fileInfo');
+  fileInfo.innerHTML = `
+    <strong>Selected File:</strong> ${selectedFile.name}<br>
+    <strong>Size:</strong> ${(selectedFile.size / 1024).toFixed(2)} KB
+  `;
+  
+  // Show preview if image
+  const preview = document.getElementById('preview');
+  if (selectedFile.type.startsWith('image/')) {
+    preview.src = URL.createObjectURL(selectedFile);
+    preview.classList.remove('d-none');
+  } else {
+    preview.classList.add('d-none');
+  }
+  
+  document.getElementById('processBtn').disabled = false;
+}
+
+// Process file based on selected action
+document.getElementById('processBtn').addEventListener('click', async () => {
+  if (!selectedFile) return;
+  
+  const action = document.getElementById('action').value;
+  const status = document.getElementById('status');
+  status.innerHTML = '<div class="spinner-border text-primary"></div> Processing...';
+  
+  try {
+    let result;
+    switch (action) {
+      case 'compress':
+        result = await compressPDF(selectedFile);
+        break;
+      case 'img2pdf':
+        result = await imageToPDF(selectedFile);
+        break;
+      case 'pdf2img':
+        result = await pdfToImages(selectedFile);
+        break;
+      case 'word2pdf':
+        result = await wordToPDF(selectedFile);
+        break;
+      default:
+        throw new Error('Invalid action');
+    }
+    
+    status.innerHTML = '<div class="text-success">✅ Done!</div>';
+    enableDownload(result);
+  } catch (error) {
+    status.innerHTML = `<div class="text-danger">❌ Error: ${error.message}</div>`;
+  }
+});
+
+// Enable download button
+function enableDownload(blob) {
+  const downloadBtn = document.getElementById('downloadBtn');
+  downloadBtn.href = URL.createObjectURL(blob);
+  downloadBtn.download = `processed_${selectedFile.name}`;
+  downloadBtn.classList.remove('d-none');
+}
+
+// PDF Compression
+async function compressPDF(file) {
+  const pdfBytes = await file.arrayBuffer();
+  const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+  
+  // Simple compression by reducing image quality
+  const pages = pdfDoc.getPages();
+  for (const page of pages) {
+    const { width, height } = page.getSize();
+    page.setSize(width * 0.9, height * 0.9); // Reduce dimensions slightly
+  }
+  
+  const compressedBytes = await pdfDoc.save();
+  return new Blob([compressedBytes], { type: 'application/pdf' });
+}
+
+// Image to PDF
+async function imageToPDF(file) {
+  const img = await createImageBitmap(file);
+  const pdfDoc = await PDFLib.PDFDocument.create();
+  const page = pdfDoc.addPage([img.width, img.height]);
+  page.drawImage(img, {
+    x: 0,
+    y: 0,
+    width: img.width,
+    height: img.height,
+  });
+  const pdfBytes = await pdfDoc.save();
+  return new Blob([pdfBytes], { type: 'application/pdf' });
+}
+
+// PDF to Images (first page only)
+async function pdfToImages(file) {
+  // Requires PDF.js (not included here for simplicity)
+  alert("PDF to Images requires PDF.js. Check the full project on GitHub.");
+  throw new Error("Not implemented in this demo");
+}
+
+// Word to PDF (Experimental - limited)
+async function wordToPDF(file) {
+  // Requires docx.js or similar (not included here)
+  alert("Word to PDF requires a backend. This demo only works for images & PDFs.");
+  throw new Error("Not implemented in this demo");
+}
